@@ -1,12 +1,27 @@
-﻿{
+{
   "name": "asary",
   "version": "1.0.0",
   "description": "asary project",
   "main": "index.js",
   "scripts": {
+    "start": "node src/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nuwoonim/asary.git"
+  },
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/nuwoonim/asary/issues"
+  },
+  "homepage": "https://github.com/nuwoonim/asary#readme",
+  "dependencies": {
+    "better-sqlite3": "^12.10.0",
+    "cors": "^2.8.6",
+    "express": "^5.2.1"
+  }
 }

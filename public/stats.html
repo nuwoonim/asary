@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asary - 통계 현황</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-body: #0a0a0a;
+            --bg-card: #141414;
+            --bg-hover: #1a1a1a;
+            --border: #2a2a2a;
+            --text-main: #eee;
+            --text-sub: #888;
+            --primary: #ff6b35;
+            --primary-light: rgba(255, 107, 53, 0.15);
+            --info: #4a9eff;
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-body); color: var(--text-main); min-height: 100vh; }
+        .layout-container { display: flex; min-height: 100vh; }
+        .sidebar-left { width: 240px; background: var(--bg-card); border-right: 1px solid var(--border); padding: 20px; position: fixed; height: 100vh; overflow-y: auto; }
+        .logo-area { padding: 10px 0 30px; }
+        .logo-area a { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text-main); }
+        .logo-icon { font-size: 24px; }
+        .logo-text { font-size: 18px; font-weight: bold; }
+        .nav-group { margin-bottom: 20px; }
+        .drawer-section-title { font-size: 11px; color: var(--text-sub); margin-bottom: 10px; padding-left: 10px; }
+        .nav-item { display: flex; align-items: center; gap: 10px; padding: 12px 10px; color: var(--text-sub); text-decoration: none; border-radius: 8px; transition: 0.2s; cursor: pointer; }
+        .nav-item:hover, .nav-item.active { background: var(--bg-hover); color: var(--text-main); }
+        .nav-item.active { color: var(--primary); }
+        .nav-icon { font-size: 16px; }
+        .main-content { flex: 1; margin-left: 240px; padding: 40px; max-width: 1400px; }
+        .page-title { font-size: 28px; margin-bottom: 30px; }
+        .page-title span { color: var(--primary); }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 40px; }
+        .stat-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; }
+        .stat-label { font-size: 13px; color: var(--text-sub); margin-bottom: 12px; }
+        .stat-value { font-size: 32px; font-weight: bold; color: var(--primary); }
+        .stat-value.gender-male { color: #6ab7ff; }
+        .stat-value.gender-female { color: #ff9ecd; }
+        .section-title { font-size: 20px; margin: 40px 0 20px; display: flex; align-items: center; gap: 12px; }
+        .section-title::before { content: ''; width: 4px; height: 24px; background: var(--primary); border-radius: 2px; }
+        .chart-container { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin-bottom: 40px; }
+        .chart-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; }
+        .chart-card.full-width { grid-column: 1 / -1; }
+        .chart-title { font-size: 16px; font-weight: 600; margin-bottom: 20px; color: var(--text-main); }
+        .chart-wrapper { position: relative; height: 300px; }
+        .stats-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 20px; }
+        .stats-summary-item { background: var(--bg-hover); padding: 16px; border-radius: 12px; text-align: center; }
+        .stats-summary-label { font-size: 12px; color: var(--text-sub); margin-bottom: 8px; }
+        .stats-summary-value { font-size: 20px; font-weight: bold; }
+        .stats-summary-value.male { color: #6ab7ff; }
+        .stats-summary-value.female { color: #ff9ecd; }
+        .loading { display: flex; align-items: center; justify-content: center; padding: 60px; color: var(--text-sub); }
+        .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; margin-right: 16px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .back-link { display: inline-flex; align-items: center; gap: 8px; color: var(--text-sub); text-decoration: none; margin-bottom: 20px; padding: 10px 16px; background: var(--bg-card); border-radius: 8px; transition: 0.2s; }
+        .back-link:hover { background: var(--bg-hover); color: var(--text-main); }
+        @media (max-width: 1024px) { 
+            .sidebar-left { display: none; } 
+            .main-content { margin-left: 0; padding: 20px; } 
+            .chart-container { grid-template-columns: 1fr; }
+            .stats-summary { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+    <div class="layout-container">
+        <aside class="sidebar-left">
+            <div class="logo-area">
+                <a href="/">
+                    <span class="logo-icon">🏢</span>
+                    <span class="logo-text">Asary</span>
+                </a>
+            </div>
+            <nav class="nav-menu">
+                <div class="nav-group">
+                    <div class="drawer-section-title">MENU</div>
+                    <a href="/" class="nav-item">
+                        <span class="nav-icon">🔍</span> 기업 검색
+                    </a>
+                    <a href="/stats.html" class="nav-item active">
+                        <span class="nav-icon">📊</span> 통계 현황
+                    </a>
+                    <a href="/gender-top10.html" class="nav-item">
+                        <span class="nav-icon">⚖️</span> 남초/여초 TOP10
+                    </a>
+                </div>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <a href="/" class="back-link">← 기업 검색으로 돌아가기</a>
+            <div style="margin-bottom: 20px; padding: 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; font-size: 13px; color: var(--text-sub);">
+                <div style="margin-bottom: 8px;"><strong>자료출처 :</strong> <a href="https://opendart.fss.or.kr/disclosureinfo/biz/main.do" target="_blank" style="color: var(--primary); text-decoration: none;">opendart</a></div>
+                <div style="color: #ff6b6b;">* 통계 데이터에서 제외: 007700, 271830 (종목코드) / 급여 및 인원이 0이거나 NULL인 데이터</div>
+            </div>
+            <h1 class="page-title">인력 데이터 <span>통계 현황</span></h1>
+
+            <div id="loading" class="loading">
+                <div class="spinner"></div>
+                <span>데이터를 불러오는 중...</span>
+            </div>
+
+            <div id="statsContent" style="display: none;">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">전체 기업 수</div>
+                        <div class="stat-value" id="totalCompanies">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">전체 직원 수</div>
+                        <div class="stat-value" id="totalEmployees">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">남성 전체 직원</div>
+                        <div class="stat-value gender-male" id="totalMaleEmployees">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">여성 전체 직원</div>
+                        <div class="stat-value gender-female" id="totalFemaleEmployees">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">남성 평균 급여</div>
+                        <div class="stat-value gender-male" id="avgMaleSalary">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">여성 평균 급여</div>
+                        <div class="stat-value gender-female" id="avgFemaleSalary">-</div>
+                    </div>
+                </div>
+
+                <h2 class="section-title">급여 분포 분석</h2>
+                <div class="chart-container">
+                    <div class="chart-card">
+                        <div class="chart-title">남성 1인평균급여 분포 (중앙값/평균)</div>
+                        <div class="chart-wrapper">
+                            <canvas id="maleSalaryChart"></canvas>
+                        </div>
+                        <div class="stats-summary">
+                            <div class="stats-summary-item">
+                                <div class="stats-summary-label">중앙값</div>
+                                <div class="stats-summary-value male" id="maleMedian">-</div>
+                            </div>
+                            <div class="stats-summary-item">
+                                <div class="stats-summary-label">평균</div>
+                                <div class="stats-summary-value male" id="maleAvg">-</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-title">여성 1인평균급여 분포 (중앙값/평균)</div>
+                        <div class="chart-wrapper">
+                            <canvas id="femaleSalaryChart"></canvas>
+                        </div>
+                        <div class="stats-summary">
+                            <div class="stats-summary-item">
+                                <div class="stats-summary-label">중앙값</div>
+                                <div class="stats-summary-value female" id="femaleMedian">-</div>
+                            </div>
+                            <div class="stats-summary-item">
+                                <div class="stats-summary-label">평균</div>
+                                <div class="stats-summary-value female" id="femaleAvg">-</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h2 class="section-title">시장별 현황 비교</h2>
+                <div class="chart-container">
+                    <div class="chart-card full-width">
+                        <div class="chart-title">코스닥 vs 유가증권시장 주요 지표 비교</div>
+                        <div class="chart-wrapper" style="height: 400px;">
+                            <canvas id="marketComparisonChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+
+        function formatNumber(num) {
+            if (!num) return '0';
+            return parseInt(num).toLocaleString('ko-KR');
+        }
+
+        function formatCurrency(num) {
+            if (!num) return '0원';
+            return parseInt(num).toLocaleString('ko-KR') + '원';
+        }
+
+        function formatCurrencyShort(num) {
+            if (!num) return '0';
+            num = parseInt(num);
+            if (num >= 100000000) return (num / 100000000).toFixed(1) + '억';
+            if (num >= 10000) return (num / 10000).toFixed(0) + '만';
+            return num.toLocaleString('ko-KR');
+        }
+
+        let maleChart, femaleChart, marketChart;
+
+        function createBarChart(canvasId, label, values, color) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            return new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: [label],
+                    datasets: [{
+                        data: values,
+                        backgroundColor: color,
+                        borderColor: color,
+                        borderWidth: 0,
+                        borderRadius: 8,
+                        barThickness: 60
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return formatCurrency(context.raw);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { 
+                                color: '#888',
+                                callback: function(value) {
+                                    return formatCurrencyShort(value);
+                                }
+                            }
+                        },
+                        y: {
+                            grid: { display: false },
+                            ticks: { color: '#888' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createMarketChart(data) {
+            const ctx = document.getElementById('marketComparisonChart').getContext('2d');
+            
+            const kosdaq = data['Q'] || { companyCount: 0, totalEmployees: 0, avgMaleSalary: 0, avgFemaleSalary: 0 };
+            const kospi = data['I'] || { companyCount: 0, totalEmployees: 0, avgMaleSalary: 0, avgFemaleSalary: 0 };
+
+            return new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['코스닥', '유가증권시장'],
+                    datasets: [
+                        {
+                            label: '기업 수',
+                            data: [kosdaq.companyCount, kospi.companyCount],
+                            backgroundColor: 'rgba(255, 107, 53, 0.7)',
+                            borderColor: '#ff6b35',
+                            borderWidth: 1,
+                            borderRadius: 8,
+                            barPercentage: 0.7
+                        },
+                        {
+                            label: '총 직원 수 (단위: 만)',
+                            data: [
+                                Math.round(kosdaq.totalEmployees / 10000),
+                                Math.round(kospi.totalEmployees / 10000)
+                            ],
+                            backgroundColor: 'rgba(74, 158, 255, 0.7)',
+                            borderColor: '#4a9eff',
+                            borderWidth: 1,
+                            borderRadius: 8,
+                            barPercentage: 0.7
+                        },
+                        {
+                            label: '남성 평균급여 (단위: 만)',
+                            data: [
+                                Math.round(kosdaq.avgMaleSalary / 10000),
+                                Math.round(kospi.avgMaleSalary / 10000)
+                            ],
+                            backgroundColor: 'rgba(106, 183, 255, 0.7)',
+                            borderColor: '#6ab7ff',
+                            borderWidth: 1,
+                            borderRadius: 8,
+                            barPercentage: 0.7
+                        },
+                        {
+                            label: '여성 평균급여 (단위: 만)',
+                            data: [
+                                Math.round(kosdaq.avgFemaleSalary / 10000),
+                                Math.round(kospi.avgFemaleSalary / 10000)
+                            ],
+                            backgroundColor: 'rgba(255, 158, 205, 0.7)',
+                            borderColor: '#ff9ecd',
+                            borderWidth: 1,
+                            borderRadius: 8,
+                            barPercentage: 0.7
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: { color: '#888', padding: 20 }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.dataset.label || '';
+                                    const value = context.raw;
+                                    if (label.includes('기업')) return `${label}: ${formatNumber(value)}개`;
+                                    if (label.includes('직원')) return `${label}: ${formatNumber(value * 10000)}명`;
+                                    return `${label}: ${formatCurrency(value * 10000)}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#888' }
+                        },
+                        y: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { 
+                                color: '#888',
+                                callback: function(value) {
+                                    return value.toLocaleString('ko-KR');
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        async function loadStats() {
+            try {
+                const [summaryRes, salaryRes, marketRes] = await Promise.all([
+                    fetch(`${API_BASE}/stats/summary`),
+                    fetch(`${API_BASE}/stats/salary-distribution`),
+                    fetch(`${API_BASE}/stats/market-comparison`)
+                ]);
+
+                const summaryData = await summaryRes.json();
+                const salaryData = await salaryRes.json();
+                const marketData = await marketRes.json();
+
+                if (summaryData.success) {
+                    const s = summaryData.data;
+                    document.getElementById('totalCompanies').textContent = formatNumber(s.totalCompanies);
+                    document.getElementById('totalEmployees').textContent = formatNumber(s.totalEmployees) + '명';
+                    document.getElementById('totalMaleEmployees').textContent = formatNumber(s.totalMaleEmployees) + '명';
+                    document.getElementById('totalFemaleEmployees').textContent = formatNumber(s.totalFemaleEmployees) + '명';
+                    document.getElementById('avgMaleSalary').textContent = formatCurrency(s.avgMaleSalary);
+                    document.getElementById('avgFemaleSalary').textContent = formatCurrency(s.avgFemaleSalary);
+                }
+
+                if (salaryData.success) {
+                    const { male, female } = salaryData.data;
+
+                    document.getElementById('maleMedian').textContent = formatCurrencyShort(male.median);
+                    document.getElementById('maleAvg').textContent = formatCurrencyShort(male.avg);
+
+                    document.getElementById('femaleMedian').textContent = formatCurrencyShort(female.median);
+                    document.getElementById('femaleAvg').textContent = formatCurrencyShort(female.avg);
+
+                    if (maleChart) maleChart.destroy();
+                    if (femaleChart) femaleChart.destroy();
+
+                    maleChart = createBarChart('maleSalaryChart', '남성', [male.median, male.avg], '#6ab7ff');
+                    femaleChart = createBarChart('femaleSalaryChart', '여성', [female.median, female.avg], '#ff9ecd');
+                }
+
+                if (marketData.success) {
+                    if (marketChart) marketChart.destroy();
+                    marketChart = createMarketChart(marketData.data);
+                }
+
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('statsContent').style.display = 'block';
+            } catch (error) {
+                console.error('Error loading stats:', error);
+                document.getElementById('loading').innerHTML = '<span>데이터를 불러오는데 실패했습니다.</span>';
+            }
+        }
+
+        loadStats();
+    </script>
+</body>
+</html>

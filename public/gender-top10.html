@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asary - 남초/여초 TOP10</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-body: #0a0a0a;
+            --bg-card: #141414;
+            --bg-hover: #1a1a1a;
+            --border: #2a2a2a;
+            --text-main: #eee;
+            --text-sub: #888;
+            --primary: #ff6b35;
+            --primary-light: rgba(255, 107, 53, 0.15);
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-body); color: var(--text-main); min-height: 100vh; }
+        .layout-container { display: flex; min-height: 100vh; }
+        .sidebar-left { width: 240px; background: var(--bg-card); border-right: 1px solid var(--border); padding: 20px; position: fixed; height: 100vh; overflow-y: auto; }
+        .logo-area { padding: 10px 0 30px; }
+        .logo-area a { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text-main); }
+        .logo-icon { font-size: 24px; }
+        .logo-text { font-size: 18px; font-weight: bold; }
+        .nav-group { margin-bottom: 20px; }
+        .drawer-section-title { font-size: 11px; color: var(--text-sub); margin-bottom: 10px; padding-left: 10px; }
+        .nav-item { display: flex; align-items: center; gap: 10px; padding: 12px 10px; color: var(--text-sub); text-decoration: none; border-radius: 8px; transition: 0.2s; cursor: pointer; }
+        .nav-item:hover, .nav-item.active { background: var(--bg-hover); color: var(--text-main); }
+        .nav-item.active { color: var(--primary); }
+        .nav-icon { font-size: 16px; }
+        .main-content { flex: 1; margin-left: 240px; padding: 40px; max-width: 1400px; }
+        .page-title { font-size: 28px; margin-bottom: 30px; }
+        .page-title span { color: var(--primary); }
+        .back-link { display: inline-flex; align-items: center; gap: 8px; color: var(--text-sub); text-decoration: none; margin-bottom: 20px; padding: 10px 16px; background: var(--bg-card); border-radius: 8px; transition: 0.2s; width: fit-content; }
+        .back-link:hover { background: var(--bg-hover); color: var(--text-main); }
+        .content-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+        .section-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; }
+        .section-title { font-size: 20px; font-weight: bold; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+        .section-title.male { color: #6ab7ff; }
+        .section-title.female { color: #ff9ecd; }
+        .rank-table { width: 100%; border-collapse: collapse; }
+        .rank-table th, .rank-table td { padding: 12px 8px; text-align: left; border-bottom: 1px solid var(--border); }
+        .rank-table th { color: var(--text-sub); font-size: 12px; font-weight: normal; }
+        .rank-table tr:hover { background: var(--bg-hover); }
+        .rank-num { width: 40px; font-weight: bold; color: var(--primary); }
+        .rank-name { font-weight: 600; }
+        .rank-code { font-size: 12px; color: var(--text-sub); margin-left: 8px; }
+        .rank-ratio { text-align: right; font-weight: bold; }
+        .rank-ratio.high { color: #4caf50; }
+        .chart-container { margin-top: 20px; height: 300px; }
+        .loading { display: flex; align-items: center; justify-content: center; padding: 60px; color: var(--text-sub); }
+        .stat-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+        .stat-label { font-size: 13px; color: var(--text-sub); margin-bottom: 8px; }
+        .stat-value { font-size: 28px; font-weight: bold; }
+        .stat-value.male { color: #6ab7ff; }
+        .stat-value.female { color: #ff9ecd; }
+        .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; margin-right: 16px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .footer-info { margin-top: 40px; padding: 20px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; font-size: 13px; color: var(--text-sub); }
+        @media (max-width: 1024px) {
+            .sidebar-left { display: none; }
+            .main-content { margin-left: 0; padding: 20px; }
+            .content-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="layout-container">
+        <aside class="sidebar-left">
+            <div class="logo-area">
+                <a href="/">
+                    <span class="logo-icon">🏢</span>
+                    <span class="logo-text">Asary</span>
+                </a>
+            </div>
+            <nav class="nav-menu">
+                <div class="nav-group">
+                    <div class="drawer-section-title">MENU</div>
+                    <a href="/" class="nav-item">
+                        <span class="nav-icon">🔍</span> 기업 검색
+                    </a>
+                    <a href="/stats.html" class="nav-item">
+                        <span class="nav-icon">📊</span> 통계 현황
+                    </a>
+                    <a href="/gender-top10.html" class="nav-item active">
+                        <span class="nav-icon">⚖️</span> 남초/여초 TOP10
+                    </a>
+                </div>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <a href="/" class="back-link">← 기업 검색으로 돌아가기</a>
+            <h1 class="page-title">남초/여초 <span>TOP10</span></h1>
+
+            <div id="loading" class="loading">
+                <div class="spinner"></div>
+                <span>데이터를 불러오는 중...</span>
+            </div>
+
+            <div id="content" style="display: none;">
+                <div class="stats-summary" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 30px;">
+                    <div class="stat-card">
+                        <div class="stat-label">전체 기업 수</div>
+                        <div class="stat-value" id="totalCount">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">전체 남성 비율 평균</div>
+                        <div class="stat-value male" id="avgMaleRatio">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">전체 여성 비율 평균</div>
+                        <div class="stat-value female" id="avgFemaleRatio">-</div>
+                    </div>
+                </div>
+
+                <div class="content-grid">
+                    <div class="section-card">
+                        <h2 class="section-title male">👨 남성 비율 높은 기업 (남초 TOP10)</h2>
+                        <table class="rank-table">
+                            <thead>
+                                <tr>
+                                    <th class="rank-num">#</th>
+                                    <th>회사명</th>
+                                    <th style="text-align: right;">남성비율</th>
+                                </tr>
+                            </thead>
+                            <tbody id="maleTop10"></tbody>
+                        </table>
+                        <div class="chart-container">
+                            <canvas id="maleChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="section-card">
+                        <h2 class="section-title female">👩 여성 비율 높은 기업 (여초 TOP10)</h2>
+                        <table class="rank-table">
+                            <thead>
+                                <tr>
+                                    <th class="rank-num">#</th>
+                                    <th>회사명</th>
+                                    <th style="text-align: right;">여성비율</th>
+                                </tr>
+                            </thead>
+                            <tbody id="femaleTop10"></tbody>
+                        </table>
+                        <div class="chart-container">
+                            <canvas id="femaleChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="footer-info">
+                <div style="margin-bottom: 8px;"><strong>자료출처 :</strong> <a href="https://opendart.fss.or.kr/disclosureinfo/biz/main.do" target="_blank" style="color: var(--primary); text-decoration: none;">opendart</a></div>
+                <div style="color: #ff6b6b;">* 통계 데이터에서 제외: 007700, 271830 (종목코드) / 급여 및 인원이 0이거나 NULL인 데이터</div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+
+        function formatNumber(num) {
+            if (!num) return '0';
+            return parseInt(num).toLocaleString('ko-KR');
+        }
+
+        async function loadData() {
+            try {
+                const res = await fetch(`${API_BASE}/stats/gender-top10`);
+                const data = await res.json();
+
+                if (data.success) {
+                    const { topMale, topFemale, avgMaleRatio, avgFemaleRatio, totalCount } = data.data;
+
+                    const maleTbody = document.getElementById('maleTop10');
+                    const femaleTbody = document.getElementById('femaleTop10');
+
+                    maleTbody.innerHTML = topMale.map((r, i) => `
+                        <tr>
+                            <td class="rank-num">${i + 1}</td>
+                            <td>
+                                <span class="rank-name">${r.회사명}</span>
+                                <span class="rank-code">${r.종목코드}</span>
+                            </td>
+                            <td class="rank-ratio high">${r.maleRatio.toFixed(1)}%</td>
+                        </tr>
+                    `).join('');
+
+                    femaleTbody.innerHTML = topFemale.map((r, i) => `
+                        <tr>
+                            <td class="rank-num">${i + 1}</td>
+                            <td>
+                                <span class="rank-name">${r.회사명}</span>
+                                <span class="rank-code">${r.종목코드}</span>
+                            </td>
+                            <td class="rank-ratio high">${r.femaleRatio.toFixed(1)}%</td>
+                        </tr>
+                    `).join('');
+
+                    const chartOptions = {
+                        indexAxis: 'y',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { 
+                            legend: { display: false },
+                            tooltip: { callbacks: { label: ctx => ctx.raw.toFixed(1) + '%' } }
+                        },
+                        scales: {
+                            x: {
+                                max: 100,
+                                grid: { color: 'rgba(255,255,255,0.05)' },
+                                ticks: { color: '#888', callback: v => v + '%' }
+                            },
+                            y: { grid: { display: false }, ticks: { color: '#888' } }
+                        }
+                    };
+
+                    new Chart(document.getElementById('maleChart'), {
+                        type: 'bar',
+                        data: {
+                            labels: topMale.map(r => r.회사명.substring(0, 8)),
+                            datasets: [
+                                {
+                                    data: topMale.map(r => r.maleRatio),
+                                    backgroundColor: topMale.map(r => r.maleRatio >= avgMaleRatio ? 'rgba(76, 175, 80, 0.7)' : 'rgba(106, 183, 255, 0.7)'),
+                                    borderColor: topMale.map(r => r.maleRatio >= avgMaleRatio ? '#4caf50' : '#6ab7ff'),
+                                    borderWidth: 1,
+                                    borderRadius: 4
+                                }
+                            ]
+                        },
+                        options: {
+                            ...chartOptions,
+                            plugins: {
+                                ...chartOptions.plugins,
+                                afterDraw: function(chart) {
+                                    const ctx = chart.ctx;
+                                    const xScale = chart.scales.x;
+                                    const yScale = chart.scales.y;
+                                    const xPos = xScale.getPixelForValue(avgMaleRatio);
+
+                                    ctx.save();
+                                    ctx.beginPath();
+                                    ctx.setLineDash([5, 5]);
+                                    ctx.strokeStyle = '#ff6b35';
+                                    ctx.lineWidth = 2;
+                                    ctx.moveTo(xPos, yScale.top);
+                                    ctx.lineTo(xPos, yScale.bottom);
+                                    ctx.stroke();
+
+                                    ctx.fillStyle = '#ff6b35';
+                                    ctx.font = 'bold 12px sans-serif';
+                                    ctx.fillText('평균 ' + avgMaleRatio.toFixed(1) + '%', xPos + 5, yScale.top + 15);
+                                    ctx.restore();
+                                }
+                            }
+                        }
+                    });
+
+                    new Chart(document.getElementById('femaleChart'), {
+                        type: 'bar',
+                        data: {
+                            labels: topFemale.map(r => r.회사명.substring(0, 8)),
+                            datasets: [
+                                {
+                                    data: topFemale.map(r => r.femaleRatio),
+                                    backgroundColor: topFemale.map(r => r.femaleRatio >= avgFemaleRatio ? 'rgba(76, 175, 80, 0.7)' : 'rgba(255, 158, 205, 0.7)'),
+                                    borderColor: topFemale.map(r => r.femaleRatio >= avgFemaleRatio ? '#4caf50' : '#ff9ecd'),
+                                    borderWidth: 1,
+                                    borderRadius: 4
+                                }
+                            ]
+                        },
+                        options: {
+                            ...chartOptions,
+                            plugins: {
+                                ...chartOptions.plugins,
+                                afterDraw: function(chart) {
+                                    const ctx = chart.ctx;
+                                    const xScale = chart.scales.x;
+                                    const yScale = chart.scales.y;
+                                    const xPos = xScale.getPixelForValue(avgFemaleRatio);
+
+                                    ctx.save();
+                                    ctx.beginPath();
+                                    ctx.setLineDash([5, 5]);
+                                    ctx.strokeStyle = '#ff6b35';
+                                    ctx.lineWidth = 2;
+                                    ctx.moveTo(xPos, yScale.top);
+                                    ctx.lineTo(xPos, yScale.bottom);
+                                    ctx.stroke();
+
+                                    ctx.fillStyle = '#ff6b35';
+                                    ctx.font = 'bold 12px sans-serif';
+                                    ctx.fillText('평균 ' + avgFemaleRatio.toFixed(1) + '%', xPos + 5, yScale.top + 15);
+                                    ctx.restore();
+                                }
+                            }
+                        }
+                    });
+
+                    document.getElementById('totalCount').textContent = formatNumber(totalCount);
+                    document.getElementById('avgMaleRatio').textContent = avgMaleRatio.toFixed(1) + '%';
+                    document.getElementById('avgFemaleRatio').textContent = avgFemaleRatio.toFixed(1) + '%';
+
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('content').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('loading').innerHTML = '<span>데이터를 불러오는데 실패했습니다.</span>';
+            }
+        }
+
+        loadData();
+    </script>
+</body>
+</html>
