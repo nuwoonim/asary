@@ -161,7 +161,7 @@
     </div>
 
     <script type="module">
-        import { loadData, getGenderTop10 } from './js/data.js';
+        import { initData, getGenderTop10 } from './js/data.js';
 
         function formatNumber(num) {
             if (!num) return '0';
@@ -172,8 +172,8 @@
             try {
                 const data = getGenderTop10();
 
-                if (data.success) {
-                    const { topMale, topFemale, avgMaleRatio, avgFemaleRatio, totalCount } = data.data;
+                if (data) {
+                    const { topMale, topFemale, avgMaleRatio, avgFemaleRatio, totalCount } = data;
 
                     const maleTbody = document.getElementById('maleTop10');
                     const femaleTbody = document.getElementById('femaleTop10');
@@ -315,7 +315,10 @@
             }
         }
 
-        loadData().then(() => renderGenderTop10());
+        initData().then(ok => {
+            if (ok) renderGenderTop10();
+            else document.getElementById('loading').innerHTML = '<span>데이터를 불러오는데 실패했습니다.</span>';
+        });
     </script>
 </body>
 </html>

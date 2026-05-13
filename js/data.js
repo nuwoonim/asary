@@ -9,6 +9,9 @@ let allData = [];
 let filteredData = [];
 let companyMap = new Map();
 let statsCache = null;
+let salaryDistributionCache = null;
+let marketComparisonCache = null;
+let genderTop10Cache = null;
 
 export async function initData() {
     try {
@@ -101,14 +104,85 @@ export function getCompany(code) {
 }
 
 export function getGenderTop10() {
+    if (genderTop10Cache) return genderTop10Cache;
+
     const withRatio = filteredData.map(r => ({
         ...r,
         maleRatio: (parseInt(r['남합계']) || 0) / ((parseInt(r['남합계']) || 0) + (parseInt(r['여합계']) || 0)) * 100,
         femaleRatio: (parseInt(r['여합계']) || 0) / ((parseInt(r['남합계']) || 0) + (parseInt(r['여합계']) || 0)) * 100
     }));
-    return {
-        topMale: [...withRatio].sort((a, b) => b.maleRatio - a.maleRatio).slice(0, 10),
-        topFemale: [...withRatio].sort((a, b) => b.femaleRatio - a.femaleRatio).slice(0, 10),
+
+    const topMale = [...withRatio].sort((a, b) => b.maleRatio - a.maleRatio).slice(0, 10);
+    const topFemale = [...withRatio].sort((a, b) => b.femaleRatio - a.femaleRatio).slice(0, 10);
+
+    const totalMale = filteredData.reduce((s, r) => s + (parseInt(r['남합계']) || 0), 0);
+    const totalFemale = filteredData.reduce((s, r) => s + (parseInt(r['여합계']) || 0), 0);
+    const totalAll = totalMale + totalFemale;
+    const avgMaleRatio = totalAll > 0 ? (totalMale / totalAll) * 100 : 0;
+    const avgFemaleRatio = 100 - avgMaleRatio;
+
+    genderTop10Cache = {
+        topMale,
+        topFemale,
+        avgMaleRatio,
+        avgFemaleRatio,
         totalCount: filteredData.length
     };
+
+    return genderTop10Cache;
+}
+
+export function getSalaryDistribution() {
+    if (salaryDistributionCache) return salaryDistributionCache;
+
+    const calcStats = (arr) => {
+        if (arr.length === 0) return { min: 0, max: 0, median: 0, avg: 0 };
+        const sorted = [...arr].sort((a, b) => a - b);
+        return {
+            min: sorted[0],
+            max: sorted[sorted.length - 1],
+            median: sorted.length % 2 === 0 ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2 : sorted[Math.floor(sorted.length / 2)],
+            avg: Math.round(arr.reduce((a, b) => a + b, 0) / arr.length)
+        };
+    };
+
+    const maleSalaries = filteredData.map(r => parseInt(r['남_1인평균급여액']) || 0);
+    const femaleSalaries = filteredData.map(r => parseInt(r['여_1인평균급여액']) || 0);
+
+    salaryDistributionCache = {
+        male: calcStats(maleSalaries),
+        female: calcStats(femaleSalaries)
+    };
+
+    return salaryDistributionCache;
+}
+
+export function getMarketComparison() {
+    if (marketComparisonCache) return marketComparisonCache;
+
+    const byMarket = {};
+    filteredData.forEach(r => {
+        const market = r['시장구분'];
+        if (!byMarket[market]) {
+            byMarket[market] = { companyCount: 0, totalEmployees: 0, maleSalaries: [], femaleSalaries: [] };
+        }
+        byMarket[market].companyCount++;
+        byMarket[market].totalEmployees += (parseInt(r['남합계']) || 0) + (parseInt(r['여합계']) || 0);
+        byMarket[market].maleSalaries.push(parseInt(r['남_1인평균급여액']) || 0);
+        byMarket[market].femaleSalaries.push(parseInt(r['여_1인평균급여액']) || 0);
+    });
+
+    const result = {};
+    Object.entries(byMarket).forEach(([key, data]) => {
+        result[key] = {
+            companyCount: data.companyCount,
+            totalEmployees: data.totalEmployees,
+            avgSalary: Math.round([...data.maleSalaries, ...data.femaleSalaries].reduce((a, b) => a + b, 0) / data.companyCount / 2),
+            avgMaleSalary: Math.round(data.maleSalaries.reduce((a, b) => a + b, 0) / data.maleSalaries.length),
+            avgFemaleSalary: Math.round(data.femaleSalaries.reduce((a, b) => a + b, 0) / data.femaleSalaries.length)
+        };
+    });
+
+    marketComparisonCache = result;
+    return marketComparisonCache;
 }

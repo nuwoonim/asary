@@ -182,7 +182,7 @@
     </div>
 
     <script type="module">
-        import { loadData, getSummaryStats, getSalaryDistribution, getMarketComparison } from './js/data.js';
+        import { initData, getStats, getSalaryDistribution, getMarketComparison } from './js/data.js';
 
         function formatNumber(num) {
             if (!num) return '0';
@@ -237,7 +237,7 @@
                         x: {
                             beginAtZero: true,
                             grid: { color: 'rgba(255,255,255,0.05)' },
-                            ticks: { 
+                            ticks: {
                                 color: '#888',
                                 callback: function(value) {
                                     return formatCurrencyShort(value);
@@ -255,7 +255,7 @@
 
         function createMarketChart(data) {
             const ctx = document.getElementById('marketComparisonChart').getContext('2d');
-            
+
             const kosdaq = data['Q'] || { companyCount: 0, totalEmployees: 0, avgMaleSalary: 0, avgFemaleSalary: 0 };
             const kospi = data['I'] || { companyCount: 0, totalEmployees: 0, avgMaleSalary: 0, avgFemaleSalary: 0 };
 
@@ -338,7 +338,7 @@
                         },
                         y: {
                             grid: { color: 'rgba(255,255,255,0.05)' },
-                            ticks: { 
+                            ticks: {
                                 color: '#888',
                                 callback: function(value) {
                                     return value.toLocaleString('ko-KR');
@@ -352,22 +352,21 @@
 
         async function loadStats() {
             try {
-                const summaryData = getSummaryStats();
+                const stats = getStats();
                 const salaryData = getSalaryDistribution();
                 const marketData = getMarketComparison();
 
-                if (summaryData.success) {
-                    const s = summaryData.data;
-                    document.getElementById('totalCompanies').textContent = formatNumber(s.totalCompanies);
-                    document.getElementById('totalEmployees').textContent = formatNumber(s.totalEmployees) + '명';
-                    document.getElementById('totalMaleEmployees').textContent = formatNumber(s.totalMaleEmployees) + '명';
-                    document.getElementById('totalFemaleEmployees').textContent = formatNumber(s.totalFemaleEmployees) + '명';
-                    document.getElementById('avgMaleSalary').textContent = formatCurrency(s.avgMaleSalary);
-                    document.getElementById('avgFemaleSalary').textContent = formatCurrency(s.avgFemaleSalary);
+                if (stats) {
+                    document.getElementById('totalCompanies').textContent = formatNumber(stats.totalCompanies);
+                    document.getElementById('totalEmployees').textContent = formatNumber(stats.totalEmployees) + '명';
+                    document.getElementById('totalMaleEmployees').textContent = formatNumber(stats.totalMale) + '명';
+                    document.getElementById('totalFemaleEmployees').textContent = formatNumber(stats.totalFemale) + '명';
+                    document.getElementById('avgMaleSalary').textContent = formatCurrency(stats.avgMaleSalary);
+                    document.getElementById('avgFemaleSalary').textContent = formatCurrency(stats.avgFemaleSalary);
                 }
 
-                if (salaryData.success) {
-                    const { male, female } = salaryData.data;
+                if (salaryData) {
+                    const { male, female } = salaryData;
 
                     document.getElementById('maleMedian').textContent = formatCurrencyShort(male.median);
                     document.getElementById('maleAvg').textContent = formatCurrencyShort(male.avg);
@@ -382,9 +381,9 @@
                     femaleChart = createBarChart('femaleSalaryChart', '여성', [female.median, female.avg], '#ff9ecd');
                 }
 
-                if (marketData.success) {
+                if (marketData) {
                     if (marketChart) marketChart.destroy();
-                    marketChart = createMarketChart(marketData.data);
+                    marketChart = createMarketChart(marketData);
                 }
 
                 document.getElementById('loading').style.display = 'none';
@@ -395,7 +394,10 @@
             }
         }
 
-        loadData().then(() => loadStats());
+        initData().then(ok => {
+            if (ok) loadStats();
+            else document.getElementById('loading').innerHTML = '<span>데이터를 불러오는데 실패했습니다.</span>';
+        });
     </script>
 </body>
 </html>
