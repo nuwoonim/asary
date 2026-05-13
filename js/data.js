@@ -6,6 +6,9 @@ const DATA_FILTER = (row) => {
 };
 
 let allData = [];
+let filteredData = [];
+let companyMap = new Map();
+let statsCache = null;
 
 export async function initData() {
     try {
@@ -13,6 +16,19 @@ export async function initData() {
         if (!res.ok) throw new Error('data.json not found');
         allData = await res.json();
         console.log('Loaded', allData.length, 'companies');
+
+        // Pre-filter and cache
+        filteredData = allData.filter(DATA_FILTER);
+        console.log('Filtered to', filteredData.length, 'valid companies');
+
+        // Build index for fast lookup
+        filteredData.forEach(row => {
+            companyMap.set(row['종목코드'], row);
+        });
+
+        // Pre-calculate stats
+        statsCache = calculateStats();
+
         return true;
     } catch (e) {
         console.error('Data load failed:', e);
@@ -20,31 +36,22 @@ export async function initData() {
     }
 }
 
-export function getFilteredData(search = '', stockCode = '', market = '') {
-    let result = allData.filter(DATA_FILTER);
-    if (search) result = result.filter(r => r['회사명'].includes(search));
-    if (stockCode) result = result.filter(r => r['종목코드'] === stockCode);
-    if (market) result = result.filter(r => r['시장구분'] === market);
-    return result;
-}
+function calculateStats() {
+    if (filteredData.length === 0) return null;
 
-export function getStats() {
-    const data = getFilteredData();
-    if (data.length === 0) return null;
+    const totalEmployees = filteredData.reduce((s, r) => s + (parseInt(r['남합계']) || 0) + (parseInt(r['여합계']) || 0), 0);
+    const totalMale = filteredData.reduce((s, r) => s + (parseInt(r['남합계']) || 0), 0);
+    const totalFemale = filteredData.reduce((s, r) => s + (parseInt(r['여합계']) || 0), 0);
+    const avgMale = filteredData.reduce((s, r) => s + (parseInt(r['남_1인평균급여액']) || 0), 0) / filteredData.length;
+    const avgFemale = filteredData.reduce((s, r) => s + (parseInt(r['여_1인평균급여액']) || 0), 0) / filteredData.length;
 
-    const totalEmployees = data.reduce((s, r) => s + (parseInt(r['남합계']) || 0) + (parseInt(r['여합계']) || 0), 0);
-    const totalMale = data.reduce((s, r) => s + (parseInt(r['남합계']) || 0), 0);
-    const totalFemale = data.reduce((s, r) => s + (parseInt(r['여합계']) || 0), 0);
-    const avgMale = data.reduce((s, r) => s + (parseInt(r['남_1인평균급여액']) || 0), 0) / data.length;
-    const avgFemale = data.reduce((s, r) => s + (parseInt(r['여_1인평균급여액']) || 0), 0) / data.length;
-
-    const maleSalaries = data.map(r => parseInt(r['남_1인평균급여액']) || 0).sort((a, b) => a - b);
-    const femaleSalaries = data.map(r => parseInt(r['여_1인평균급여액']) || 0).sort((a, b) => a - b);
+    const maleSalaries = filteredData.map(r => parseInt(r['남_1인평균급여액']) || 0).sort((a, b) => a - b);
+    const femaleSalaries = filteredData.map(r => parseInt(r['여_1인평균급여액']) || 0).sort((a, b) => a - b);
     const medianMale = maleSalaries[Math.floor(maleSalaries.length / 2)] || 0;
     const medianFemale = femaleSalaries[Math.floor(femaleSalaries.length / 2)] || 0;
 
     return {
-        totalCompanies: data.length,
+        totalCompanies: filteredData.length,
         totalEmployees,
         totalMale,
         totalFemale,
@@ -55,26 +62,46 @@ export function getStats() {
     };
 }
 
+export function getStats() {
+    return statsCache;
+}
+
 export function searchCompanies(search = '', stockCode = '', market = '', sortBy = '회사명', page = 1, limit = 20) {
-    const filtered = getFilteredData(search, stockCode, market);
+    let result = filteredData;
+
+    // Apply filters
+    if (search) {
+        const searchLower = search.toLowerCase();
+        result = result.filter(r => r['회사명'].toLowerCase().includes(searchLower));
+    }
+    if (stockCode) {
+        result = result.filter(r => r['종목코드'] === stockCode);
+    }
+    if (market) {
+        result = result.filter(r => r['시장구분'] === market);
+    }
+
+    // Sort
     const order = (sortBy === '남합계' || sortBy === '여합계') ? -1 : 1;
-    const sorted = [...filtered].sort((a, b) => {
-        if (a[sortBy] < b[sortBy]) return -1 * order;
-        if (a[sortBy] > b[sortBy]) return 1 * order;
+    result = [...result].sort((a, b) => {
+        const aVal = a[sortBy] || '';
+        const bVal = b[sortBy] || '';
+        if (aVal < bVal) return -1 * order;
+        if (aVal > bVal) return 1 * order;
         return 0;
     });
-    const total = sorted.length;
+
+    const total = result.length;
     const start = (page - 1) * limit;
-    return { data: sorted.slice(start, start + limit), total, totalPages: Math.ceil(total / limit) };
+    return { data: result.slice(start, start + limit), total, totalPages: Math.ceil(total / limit) };
 }
 
 export function getCompany(code) {
-    return allData.find(r => r['종목코드'] === code) || null;
+    return companyMap.get(code) || null;
 }
 
 export function getGenderTop10() {
-    const data = getFilteredData();
-    const withRatio = data.map(r => ({
+    const withRatio = filteredData.map(r => ({
         ...r,
         maleRatio: (parseInt(r['남합계']) || 0) / ((parseInt(r['남합계']) || 0) + (parseInt(r['여합계']) || 0)) * 100,
         femaleRatio: (parseInt(r['여합계']) || 0) / ((parseInt(r['남합계']) || 0) + (parseInt(r['여합계']) || 0)) * 100
@@ -82,6 +109,6 @@ export function getGenderTop10() {
     return {
         topMale: [...withRatio].sort((a, b) => b.maleRatio - a.maleRatio).slice(0, 10),
         topFemale: [...withRatio].sort((a, b) => b.femaleRatio - a.femaleRatio).slice(0, 10),
-        totalCount: data.length
+        totalCount: filteredData.length
     };
 }
