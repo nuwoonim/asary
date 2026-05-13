@@ -763,7 +763,7 @@
             currentSearch = document.getElementById('searchInput').value.trim();
             currentStockCode = document.getElementById('stockCodeInput').value.trim();
             currentPage = 1;
-            loadData();
+            loadResults();
         }
 
         function setMarketFilter(market) {
@@ -772,7 +772,7 @@
                 btn.classList.toggle('active', btn.dataset.market === market);
             });
             currentPage = 1;
-            loadData();
+            loadResults();
         }
 
         function setSort(sort) {
@@ -781,7 +781,7 @@
                 btn.classList.toggle('active', btn.dataset.sort === sort);
             });
             currentPage = 1;
-            loadData();
+            loadResults();
         }
 
         function getSortOrder(sortBy) {
@@ -791,7 +791,7 @@
             return 'ASC';
         }
 
-        async function loadData() {
+        async function loadResults() {
             const container = document.getElementById('resultsContainer');
             container.innerHTML = `<div class="loading"><div class="spinner"></div><p>데이터를 불러오는 중...</p></div>`;
 
@@ -938,7 +938,7 @@
         function goToPage(page) {
             if (page < 1 || page > totalPages) return;
             currentPage = page;
-            loadData();
+            loadResults();
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
