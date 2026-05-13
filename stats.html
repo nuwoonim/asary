@@ -70,7 +70,7 @@
     <div class="layout-container">
         <aside class="sidebar-left">
             <div class="logo-area">
-                <a href="/">
+                <a href="./index.html">
                     <span class="logo-icon">🏢</span>
                     <span class="logo-text">Asary</span>
                 </a>
@@ -78,13 +78,13 @@
             <nav class="nav-menu">
                 <div class="nav-group">
                     <div class="drawer-section-title">MENU</div>
-                    <a href="/" class="nav-item">
+                    <a href="./index.html" class="nav-item">
                         <span class="nav-icon">🔍</span> 기업 검색
                     </a>
-                    <a href="/stats.html" class="nav-item active">
+                    <a href="./stats.html" class="nav-item active">
                         <span class="nav-icon">📊</span> 통계 현황
                     </a>
-                    <a href="/gender-top10.html" class="nav-item">
+                    <a href="./gender-top10.html" class="nav-item">
                         <span class="nav-icon">⚖️</span> 남초/여초 TOP10
                     </a>
                 </div>
@@ -92,7 +92,7 @@
         </aside>
 
         <main class="main-content">
-            <a href="/" class="back-link">← 기업 검색으로 돌아가기</a>
+            <a href="./index.html" class="back-link">← 기업 검색으로 돌아가기</a>
             <div style="margin-bottom: 20px; padding: 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; font-size: 13px; color: var(--text-sub);">
                 <div style="margin-bottom: 8px;"><strong>자료출처 :</strong> <a href="https://opendart.fss.or.kr/disclosureinfo/biz/main.do" target="_blank" style="color: var(--primary); text-decoration: none;">opendart</a></div>
                 <div style="color: #ff6b6b;">* 통계 데이터에서 제외: 007700, 271830 (종목코드) / 급여 및 인원이 0이거나 NULL인 데이터</div>
@@ -181,8 +181,8 @@
         </main>
     </div>
 
-    <script>
-        const API_BASE = '/api';
+    <script type="module">
+        import { loadData, getSummaryStats, getSalaryDistribution, getMarketComparison } from './js/data.js';
 
         function formatNumber(num) {
             if (!num) return '0';
@@ -352,15 +352,9 @@
 
         async function loadStats() {
             try {
-                const [summaryRes, salaryRes, marketRes] = await Promise.all([
-                    fetch(`${API_BASE}/stats/summary`),
-                    fetch(`${API_BASE}/stats/salary-distribution`),
-                    fetch(`${API_BASE}/stats/market-comparison`)
-                ]);
-
-                const summaryData = await summaryRes.json();
-                const salaryData = await salaryRes.json();
-                const marketData = await marketRes.json();
+                const summaryData = getSummaryStats();
+                const salaryData = getSalaryDistribution();
+                const marketData = getMarketComparison();
 
                 if (summaryData.success) {
                     const s = summaryData.data;
@@ -401,7 +395,7 @@
             }
         }
 
-        loadStats();
+        loadData().then(() => loadStats());
     </script>
 </body>
 </html>

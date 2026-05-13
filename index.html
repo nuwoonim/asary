@@ -610,7 +610,7 @@
         <!-- Sidebar -->
         <aside class="sidebar-left">
             <div class="logo-area">
-                <a href="/">
+                <a href="./index.html">
                     <span class="logo-icon">🏢</span>
                     <span class="logo-text">Asary</span>
                 </a>
@@ -619,13 +619,13 @@
             <nav class="nav-menu">
                 <div class="nav-group">
                     <div class="drawer-section-title">MENU</div>
-                    <a href="/" class="nav-item active">
+                    <a href="./index.html" class="nav-item active">
                         <span class="nav-icon">🔍</span> 기업 검색
                     </a>
-                    <a href="/stats.html" class="nav-item">
+                    <a href="./stats.html" class="nav-item">
                         <span class="nav-icon">📊</span> 통계 현황
                     </a>
-                    <a href="/gender-top10.html" class="nav-item">
+                    <a href="./gender-top10.html" class="nav-item">
                         <span class="nav-icon">⚖️</span> 남초/여초 TOP10
                     </a>
                 </div>
@@ -720,8 +720,8 @@
         </div>
     </div>
 
-    <script>
-        const API_BASE = '/api';
+    <script type="module">
+        import { loadData, getStocks, getSummaryStats, getStockByCode, getSearchSuggestions } from './js/data.js';
         
         let currentPage = 1;
         let currentMarket = '';
@@ -742,9 +742,8 @@
 
         async function loadStats() {
             try {
-                const res = await fetch(`${API_BASE}/stats/summary`);
-                const data = await res.json();
-                
+                const data = getSummaryStats();
+
                 if (data.success) {
                     const s = data.data;
                     document.getElementById('statTotalCompanies').textContent = formatNumber(s.totalCompanies);
@@ -797,20 +796,15 @@
 
             try {
                 const sortOrder = getSortOrder(currentSort);
-                let url = `${API_BASE}/stocks?page=${currentPage}&limit=20&sortBy=${currentSort}&sortOrder=${sortOrder}`;
-                
-                if (currentSearch) {
-                    url += `&search=${encodeURIComponent(currentSearch)}`;
-                }
-                if (currentStockCode) {
-                    url += `&stockCode=${encodeURIComponent(currentStockCode)}`;
-                }
-                if (currentMarket) {
-                    url += `&market=${encodeURIComponent(currentMarket)}`;
-                }
-
-                const res = await fetch(url);
-                const data = await res.json();
+                const data = getStocks({
+                    search: currentSearch,
+                    stockCode: currentStockCode,
+                    market: currentMarket,
+                    sortBy: currentSort,
+                    sortOrder: sortOrder,
+                    page: currentPage,
+                    limit: 20
+                });
 
                 if (data.success) {
                     renderResults(data.data);
@@ -947,30 +941,26 @@
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
-        async function showDetail(stockCode) {
+async function showDetail(stockCode) {
             const modal = document.getElementById('detailModal');
             const titleEl = document.getElementById('modalTitle');
             const bodyEl = document.getElementById('modalBody');
 
             try {
-                const [stockRes, statsRes] = await Promise.all([
-                    fetch(`${API_BASE}/stocks/${stockCode}`),
-                    fetch(`${API_BASE}/stats/summary`)
-                ]);
-                const data = await stockRes.json();
-                const statsData = await statsRes.json();
+                const data = getStockByCode(stockCode);
+                const statsData = getSummaryStats();
 
                 if (data.success) {
                     const row = data.data;
                     const globalStats = statsData.success ? statsData.data : {};
-                    titleEl.textContent = row.회사명;
+                    titleEl.textContent = row['회사명'];
 
-                    const totalEmployees = parseInt(row.남합계 || 0) + parseInt(row.여합계 || 0);
-                    const totalSalary = parseInt(row.남연간급여총액 || 0) + parseInt(row.여연간급여총액 || 0);
+                    const totalEmployees = parseInt(row['남합계'] || 0) + parseInt(row['여합계'] || 0);
+                    const totalSalary = parseInt(row['남연간급여총액'] || 0) + parseInt(row['여연간급여총액'] || 0);
                     const avgSalary = totalEmployees > 0 ? Math.round(totalSalary / totalEmployees) : 0;
 
-                    const companyMaleSalary = parseInt(row.남_1인평균급여액) || 0;
-                    const companyFemaleSalary = parseInt(row.여_1인평균급여액) || 0;
+                    const companyMaleSalary = parseInt(row['남_1인평균급여액']) || 0;
+                    const companyFemaleSalary = parseInt(row['여_1인평균급여액']) || 0;
                     const globalMaleAvg = parseInt(globalStats.avgMaleSalary) || 0;
                     const globalMaleMedian = parseInt(globalStats.medianMaleSalary) || 0;
                     const globalFemaleAvg = parseInt(globalStats.avgFemaleSalary) || 0;
@@ -980,11 +970,11 @@
                         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 30px;">
                             <div class="stat-card">
                                 <div class="stat-label">종목코드</div>
-                                <div class="stat-value">${row.종목코드}</div>
+                                <div class="stat-value">${row['종목코드']}</div>
                             </div>
                             <div class="stat-card">
                                 <div class="stat-label">시장구분</div>
-                                <div class="stat-value">${row.시장구분 === 'Q' ? '코스닥' : '유가증권'}</div>
+                                <div class="stat-value">${row['시장구분'] === 'Q' ? '코스닥' : '유가증권'}</div>
                             </div>
                             <div class="stat-card">
                                 <div class="stat-label">전체 직원</div>
@@ -1007,23 +997,23 @@
                             <div>
                                 <h3 style="color: #6ab7ff; margin-bottom: 16px;">👨 남성</h3>
                                 <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
-                                    <div class="data-item"><div class="data-label">정규직</div><div class="data-value male">${formatNumber(row.남정규직)}명</div></div>
-                                    <div class="data-item"><div class="data-label">기간제</div><div class="data-value male">${formatNumber(row.남기간제)}명</div></div>
-                                    <div class="data-item"><div class="data-label">합계</div><div class="data-value male">${formatNumber(row.남합계)}명</div></div>
-                                    <div class="data-item"><div class="data-label">평균근속</div><div class="data-value male">${row.남평균근속개월수_추정}개월</div></div>
-                                    <div class="data-item"><div class="data-label">연간급여총액</div><div class="data-value male">${formatCurrency(row.남연간급여총액)}</div></div>
-                                    <div class="data-item"><div class="data-label">1인평균급여</div><div class="data-value male">${formatCurrency(row.남_1인평균급여액)}</div></div>
+                                    <div class="data-item"><div class="data-label">정규직</div><div class="data-value male">${formatNumber(row['남정규직'])}명</div></div>
+                                    <div class="data-item"><div class="data-label">기간제</div><div class="data-value male">${formatNumber(row['남기간제'])}명</div></div>
+                                    <div class="data-item"><div class="data-label">합계</div><div class="data-value male">${formatNumber(row['남합계'])}명</div></div>
+                                    <div class="data-item"><div class="data-label">평균근속</div><div class="data-value male">${row['남평균근속개월수_추정']}개월</div></div>
+                                    <div class="data-item"><div class="data-label">연간급여총액</div><div class="data-value male">${formatCurrency(row['남연간급여총액'])}</div></div>
+                                    <div class="data-item"><div class="data-label">1인평균급여</div><div class="data-value male">${formatCurrency(row['남_1인평균급여액'])}</div></div>
                                 </div>
                             </div>
                             <div>
                                 <h3 style="color: #ff9ecd; margin-bottom: 16px;">👩 여성</h3>
                                 <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
-                                    <div class="data-item"><div class="data-label">정규직</div><div class="data-value female">${formatNumber(row.여정규직)}명</div></div>
-                                    <div class="data-item"><div class="data-label">기간제</div><div class="data-value female">${formatNumber(row.여기간제)}명</div></div>
-                                    <div class="data-item"><div class="data-label">합계</div><div class="data-value female">${formatNumber(row.여합계)}명</div></div>
-                                    <div class="data-item"><div class="data-label">평균근속</div><div class="data-value female">${row.여평균근속개월수_추정}개월</div></div>
-                                    <div class="data-item"><div class="data-label">연간급여총액</div><div class="data-value female">${formatCurrency(row.여연간급여총액)}</div></div>
-                                    <div class="data-item"><div class="data-label">1인평균급여</div><div class="data-value female">${formatCurrency(row.여_1인평균급여액)}</div></div>
+                                    <div class="data-item"><div class="data-label">정규직</div><div class="data-value female">${formatNumber(row['여정규직'])}명</div></div>
+                                    <div class="data-item"><div class="data-label">기간제</div><div class="data-value female">${formatNumber(row['여기간제'])}명</div></div>
+                                    <div class="data-item"><div class="data-label">합계</div><div class="data-value female">${formatNumber(row['여합계'])}명</div></div>
+                                    <div class="data-item"><div class="data-label">평균근속</div><div class="data-value female">${row['여평균근속개월수_추정']}개월</div></div>
+                                    <div class="data-item"><div class="data-label">연간급여총액</div><div class="data-value female">${formatCurrency(row['여연간급여총액'])}</div></div>
+                                    <div class="data-item"><div class="data-label">1인평균급여</div><div class="data-value female">${formatCurrency(row['여_1인평균급여액'])}</div></div>
                                 </div>
                             </div>
                         </div>
@@ -1045,13 +1035,55 @@
                                         borderRadius: 8
                                     },
                                     {
-                                        label: row.회사명,
+                                        label: row['회사명'],
                                         data: [companyMaleSalary, companyMaleSalary, companyFemaleSalary, companyFemaleSalary],
                                         backgroundColor: [companyMaleSalary > globalMaleMedian ? 'rgba(76, 175, 80, 0.7)' : 'rgba(244, 67, 54, 0.7)', companyMaleSalary > globalMaleAvg ? 'rgba(76, 175, 80, 0.7)' : 'rgba(244, 67, 54, 0.7)', companyFemaleSalary > globalFemaleMedian ? 'rgba(76, 175, 80, 0.7)' : 'rgba(244, 67, 54, 0.7)', companyFemaleSalary > globalFemaleAvg ? 'rgba(76, 175, 80, 0.7)' : 'rgba(244, 67, 54, 0.7)'],
                                         borderColor: [companyMaleSalary > globalMaleMedian ? '#4caf50' : '#f44336', companyMaleSalary > globalMaleAvg ? '#4caf50' : '#f44336', companyFemaleSalary > globalFemaleMedian ? '#4caf50' : '#f44336', companyFemaleSalary > globalFemaleAvg ? '#4caf50' : '#f44336'],
                                         borderWidth: 2,
                                         borderRadius: 8
                                     }
+                                ]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: { position: 'top', labels: { color: '#888' } },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: function(context) {
+                                                return context.dataset.label + ': ' + formatCurrency(context.raw);
+                                            }
+                                        }
+                                    }
+                                },
+                                scales: {
+                                    x: {
+                                        grid: { color: 'rgba(255,255,255,0.05)' },
+                                        ticks: { color: '#888' }
+                                    },
+                                    y: {
+                                        grid: { color: 'rgba(255,255,255,0.05)' },
+                                        ticks: {
+                                            color: '#888',
+                                            callback: function(value) {
+                                                if (value >= 100000000) return (value / 100000000).toFixed(1) + '억';
+                                                if (value >= 10000) return (value / 10000).toFixed(0) + '만';
+                                                return value;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    }, 100);
+
+                    modal.classList.add('active');
+                }
+            } catch (error) {
+                alert('상세 정보를 불러오는데 실패했습니다.');
+            }
+        }
                                 ]
                             },
                             options: {
@@ -1115,8 +1147,10 @@
             if (e.key === 'Escape') closeModal();
         });
 
-        loadStats();
-        loadData();
+        loadData().then(() => {
+            loadStats();
+            loadData();
+        });
     </script>
 </body>
 </html>
