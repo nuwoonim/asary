@@ -1148,9 +1148,15 @@ async function showDetail(stockCode) {
             if (e.key === 'Escape') closeModal();
         });
 
-        loadData().then(() => {
-            loadStats();
-        });
+        loadData()
+            .then(() => {
+                console.log('Data loaded successfully');
+                loadStats();
+            })
+            .catch(err => {
+                console.error('Failed to load data:', err);
+                document.getElementById('statTotalCompanies').textContent = '!';
+            });
     </script>
 </body>
 </html>

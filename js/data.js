@@ -10,10 +10,17 @@ const DATA_FILTER = (row) => {
 
 export async function loadData() {
     if (isLoaded) return rawData;
-    const res = await fetch('./data.json');
-    rawData = await res.json();
-    isLoaded = true;
-    return rawData;
+    try {
+        const res = await fetch('./data.json');
+        if (!res.ok) throw new Error('Failed to fetch data.json');
+        rawData = await res.json();
+        isLoaded = true;
+        console.log('data.js: Loaded', rawData.length, 'records');
+        return rawData;
+    } catch (err) {
+        console.error('data.js: Error loading data:', err);
+        throw err;
+    }
 }
 
 export function applyFilters(data, search, stockCode, market) {
