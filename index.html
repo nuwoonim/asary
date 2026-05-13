@@ -692,9 +692,10 @@
 
             <!-- Results Container -->
             <div class="results-container" id="resultsContainer">
-                <div class="loading">
-                    <div class="spinner"></div>
-                    <p>데이터를 불러오는 중...</p>
+                <div class="no-results">
+                    <div class="no-results-icon">🔍</div>
+                    <h3>검색어를 입력하세요</h3>
+                    <p>회사명 또는 종목코드로 검색할 수 있습니다.</p>
                 </div>
             </div>
 
@@ -1149,7 +1150,6 @@ async function showDetail(stockCode) {
 
         loadData().then(() => {
             loadStats();
-            loadData();
         });
     </script>
 </body>
