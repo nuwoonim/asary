@@ -308,6 +308,15 @@
             document.getElementById('modalTitle').textContent = company['회사명'];
             const totalEmp = (parseInt(company['남합계']) || 0) + (parseInt(company['여합계']) || 0);
             const totalSal = (parseInt(company['남연간급여총액']) || 0) + (parseInt(company['여연간급여총액']) || 0);
+
+            const stats = getStats();
+            const companyMaleSalary = parseInt(company['남_1인평균급여액']) || 0;
+            const companyFemaleSalary = parseInt(company['여_1인평균급여액']) || 0;
+            const globalMaleMedian = stats ? stats.medianMaleSalary : 0;
+            const globalMaleAvg = stats ? stats.avgMaleSalary : 0;
+            const globalFemaleMedian = stats ? stats.medianFemaleSalary : 0;
+            const globalFemaleAvg = stats ? stats.avgFemaleSalary : 0;
+
             document.getElementById('modalBody').innerHTML = `
                 <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 30px;">
                     <div class="stat-card"><div class="stat-label">종목코드</div><div class="stat-value">${company['종목코드']}</div></div>
@@ -315,6 +324,14 @@
                     <div class="stat-card"><div class="stat-label">전체 직원</div><div class="stat-value">${formatNumber(totalEmp)}명</div></div>
                     <div class="stat-card"><div class="stat-label">1인평균급여</div><div class="stat-value">${formatCurrency(totalEmp > 0 ? Math.round(totalSal / totalEmp) : 0)}</div></div>
                 </div>
+
+                <div style="margin-bottom: 30px;">
+                    <h3 style="margin-bottom: 16px;">📊 전체 통계 대비 급여 비교</h3>
+                    <div style="background: var(--bg-hover); border-radius: 12px; padding: 20px;">
+                        <canvas id="salaryComparisonChart"></canvas>
+                    </div>
+                </div>
+
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
                     <div>
                         <h3 style="color: #6ab7ff; margin-bottom: 16px;">👨 남성</h3>
@@ -340,6 +357,66 @@
                     </div>
                 </div>
             `;
+
+            setTimeout(() => {
+                const ctx = document.getElementById('salaryComparisonChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['남성 중앙값', '남성 평균', '여성 중앙값', '여성 평균'],
+                        datasets: [
+                            {
+                                label: '전체 통계',
+                                data: [globalMaleMedian, globalMaleAvg, globalFemaleMedian, globalFemaleAvg],
+                                backgroundColor: ['rgba(106, 183, 255, 0.3)', 'rgba(106, 183, 255, 0.3)', 'rgba(255, 158, 205, 0.3)', 'rgba(255, 158, 205, 0.3)'],
+                                borderColor: ['#6ab7ff', '#6ab7ff', '#ff9ecd', '#ff9ecd'],
+                                borderWidth: 2,
+                                borderRadius: 8
+                            },
+                            {
+                                label: company['회사명'],
+                                data: [companyMaleSalary, companyMaleSalary, companyFemaleSalary, companyFemaleSalary],
+                                backgroundColor: [companyMaleSalary > globalMaleMedian ? 'rgba(76, 175, 80, 0.7)' : 'rgba(244, 67, 54, 0.7)', companyMaleSalary > globalMaleAvg ? 'rgba(76, 175, 80, 0.7)' : 'rgba(244, 67, 54, 0.7)', companyFemaleSalary > globalFemaleMedian ? 'rgba(76, 175, 80, 0.7)' : 'rgba(244, 67, 54, 0.7)', companyFemaleSalary > globalFemaleAvg ? 'rgba(76, 175, 80, 0.7)' : 'rgba(244, 67, 54, 0.7)'],
+                                borderColor: [companyMaleSalary > globalMaleMedian ? '#4caf50' : '#f44336', companyMaleSalary > globalMaleAvg ? '#4caf50' : '#f44336', companyFemaleSalary > globalFemaleMedian ? '#4caf50' : '#f44336', companyFemaleSalary > globalFemaleAvg ? '#4caf50' : '#f44336'],
+                                borderWidth: 2,
+                                borderRadius: 8
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'top', labels: { color: '#888' } },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.dataset.label + ': ' + formatCurrency(context.raw);
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                grid: { color: 'rgba(255,255,255,0.05)' },
+                                ticks: { color: '#888' }
+                            },
+                            y: {
+                                grid: { color: 'rgba(255,255,255,0.05)' },
+                                ticks: {
+                                    color: '#888',
+                                    callback: function(value) {
+                                        if (value >= 100000000) return (value / 100000000).toFixed(1) + '억';
+                                        if (value >= 10000) return (value / 10000).toFixed(0) + '만';
+                                        return value;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }, 100);
+
             document.getElementById('detailModal').classList.add('active');
         };
 
