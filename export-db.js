@@ -2,43 +2,50 @@ const initSqlJs = require('sql.js');
 const fs = require('fs');
 const path = require('path');
 
-async function exportToJson() {
+const dbPath = path.join(__dirname, 'asary.db');
+const jsonPath = path.join(__dirname, 'data.json');
+
+if (!fs.existsSync(dbPath)) {
+    console.error('asary.db not found at:', dbPath);
+    process.exit(1);
+}
+
+async function convert() {
+    console.log('Loading sql.js...');
     const SQL = await initSqlJs();
-    const dbPath = path.join(__dirname, 'asary.db');
 
-    if (!fs.existsSync(dbPath)) {
-        console.log('asary.db not found');
-        return;
-    }
-
+    console.log('Reading asary.db...');
     const fileBuffer = fs.readFileSync(dbPath);
     const db = new SQL.Database(fileBuffer);
 
-    const tables = db.exec("SELECT name FROM sqlite_master WHERE type='table'");
-    console.log('Tables:', tables);
-
     const result = db.exec('SELECT * FROM stocksum');
-    console.log('Row count:', result[0]?.values?.length || 0);
-
-    if (result.length > 0) {
-        const columns = result[0].columns;
-        const values = result[0].values;
-
-        const data = values.map(row => {
-            const obj = {};
-            columns.forEach((col, i) => {
-                obj[col] = row[i];
-            });
-            return obj;
-        });
-
-        const jsonPath = path.join(__dirname, 'data.json');
-        fs.writeFileSync(jsonPath, JSON.stringify(data, null, 2));
-        console.log('Exported to:', jsonPath);
-        console.log('Total rows:', data.length);
+    if (result.length === 0) {
+        console.error('No data found in stocksum table');
+        return;
     }
 
+    const columns = result[0].columns;
+    const values = result[0].values;
+
+    console.log(`Found ${values.length} rows, converting...`);
+
+    const data = values.map(row => {
+        const obj = {};
+        columns.forEach((col, i) => {
+            obj[col] = row[i];
+        });
+        return obj;
+    });
+
+    fs.writeFileSync(jsonPath, JSON.stringify(data, null, 2));
+    console.log(`Saved to ${jsonPath}`);
+    console.log(`Total rows: ${data.length}`);
+
     db.close();
+    console.log('Done!');
 }
 
-exportToJson().catch(console.error);
+convert().catch(err => {
+    console.error('Error:', err);
+    process.exit(1);
+});

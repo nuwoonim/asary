@@ -1,12 +1,43 @@
 const express = require('express');
 const router = express.Router();
-const { getDb } = require('../db/database');
+const { getDb, getData } = require('../db/database');
 
-const DATA_FILTER_CONDITIONS = '"남연간급여총액" > 0 AND "여연간급여총액" > 0 AND "남_1인평균급여액" > 0 AND "여_1인평균급여액" > 0 AND "남합계" > 0 AND "여합계" > 0';
+const DATA_FILTER = (row) => {
+    return row['남연간급여총액'] > 0 && row['여연간급여총액'] > 0 &&
+           row['남_1인평균급여액'] > 0 && row['여_1인평균급여액'] > 0 &&
+           row['남합계'] > 0 && row['여합계'] > 0;
+};
+
+function applyFilters(data, search, stockCode, market) {
+    let result = data.filter(DATA_FILTER);
+
+    if (search) {
+        result = result.filter(r => r['회사명'].includes(search));
+    }
+    if (stockCode) {
+        result = result.filter(r => r['종목코드'] === stockCode);
+    }
+    if (market) {
+        result = result.filter(r => r['시장구분'] === market);
+    }
+    return result;
+}
+
+function sortData(data, sortBy, sortOrder) {
+    const validColumns = ['연도', '회사명', '종목코드', '시장구분', '남정규직', '남기간제', '남합계', '남평균근속개월수_추정', '남연간급여총액', '남_1인평균급여액', '여정규직', '여기간제', '여합계', '여평균근속개월수_추정', '여연간급여총액', '여_1인평균급여액'];
+    const column = validColumns.includes(sortBy) ? sortBy : '회사명';
+    const order = sortOrder === 'DESC' ? -1 : 1;
+
+    return [...data].sort((a, b) => {
+        if (a[column] < b[column]) return -1 * order;
+        if (a[column] > b[column]) return 1 * order;
+        return 0;
+    });
+}
 
 router.get('/stocks', (req, res) => {
-    const db = getDb();
     try {
+        const db = getData();
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 20;
         const offset = (page - 1) * limit;
@@ -16,273 +47,206 @@ router.get('/stocks', (req, res) => {
         const sortBy = req.query.sortBy || '회사명';
         const sortOrder = req.query.sortOrder || 'ASC';
 
-        let whereClauses = [DATA_FILTER_CONDITIONS];
-        let params = [];
-
-        if (search) {
-            whereClauses.push('회사명 LIKE ?');
-            params.push(`%${search}%`);
-        }
-
-        if (stockCode) {
-            whereClauses.push('종목코드 = ?');
-            params.push(stockCode);
-        }
-
-        if (market) {
-            whereClauses.push('시장구분 = ?');
-            params.push(market);
-        }
-
-        const whereSQL = `WHERE ${whereClauses.join(' AND ')}`;
-
-        const countSql = `SELECT COUNT(*) as total FROM stocksum ${whereSQL}`;
-        const { total } = db.prepare(countSql).get(...params);
-
-        const validColumns = ['연도', '회사명', '종목코드', '시장구분', '남정규직', '남기간제', '남합계', '남평균근속개월수_추정', '남연간급여총액', '남_1인평균급여액', '여정규직', '여기간제', '여합계', '여평균근속개월수_추정', '여연간급여총액', '여_1인평균급여액'];
-        const orderColumn = validColumns.includes(sortBy) ? sortBy : '회사명';
-        const order = sortOrder.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
-
-        const dataSql = `SELECT * FROM stocksum ${whereSQL} ORDER BY "${orderColumn}" ${order} LIMIT ? OFFSET ?`;
-        const rows = db.prepare(dataSql).all(...params, limit, offset);
-
-        db.close();
+        let filtered = applyFilters(db, search, stockCode, market);
+        const total = filtered.length;
+        const sorted = sortData(filtered, sortBy, sortOrder);
+        const rows = sorted.slice(offset, offset + limit);
 
         res.json({
             success: true,
             data: rows,
-            pagination: {
-                page,
-                limit,
-                total,
-                totalPages: Math.ceil(total / limit)
-            }
+            pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
         });
     } catch (error) {
-        db.close();
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
 router.get('/stocks/:stockCode', (req, res) => {
-    const db = getDb();
     try {
-        const { stockCode } = req.params;
-        const row = db.prepare('SELECT * FROM stocksum WHERE 종목코드 = ?').get(stockCode);
-
-        db.close();
-
+        const db = getData();
+        const row = db.find(r => r['종목코드'] === req.params.stockCode);
         if (row) {
             res.json({ success: true, data: row });
         } else {
             res.status(404).json({ success: false, message: 'Not found' });
         }
     } catch (error) {
-        db.close();
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
 router.get('/stats/summary', (req, res) => {
-    const db = getDb();
     try {
-        const stats = db.prepare(`
-            SELECT
-                COUNT(*) as totalCompanies,
-                SUM(남합계 + 여합계) as totalEmployees,
-                SUM(남합계) as totalMaleEmployees,
-                SUM(여합계) as totalFemaleEmployees,
-                SUM(남연간급여총액 + 여연간급여총액) as totalSalary,
-                AVG(CAST(남_1인평균급여액 AS INTEGER)) as avgMaleSalary,
-                AVG(CAST(여_1인평균급여액 AS INTEGER)) as avgFemaleSalary,
-                SUM(CASE WHEN 시장구분 = 'Q' THEN 1 ELSE 0 END) as kosdaqCount,
-                SUM(CASE WHEN 시장구분 = 'I' THEN 1 ELSE 0 END) as kospiCount
-            FROM stocksum
-            WHERE ${DATA_FILTER_CONDITIONS}
-        `).get();
+        const db = getData();
+        const filtered = db.filter(DATA_FILTER);
 
-        const maleSalaries = db.prepare(`SELECT CAST("남_1인평균급여액" AS INTEGER) as salary FROM stocksum WHERE ${DATA_FILTER_CONDITIONS} ORDER BY salary`).all();
-        const femaleSalaries = db.prepare(`SELECT CAST("여_1인평균급여액" AS INTEGER) as salary FROM stocksum WHERE ${DATA_FILTER_CONDITIONS} ORDER BY salary`).all();
+        const totalCompanies = filtered.length;
+        const totalEmployees = filtered.reduce((sum, r) => sum + (parseInt(r['남합계']) || 0) + (parseInt(r['여합계']) || 0), 0);
+        const totalMaleEmployees = filtered.reduce((sum, r) => sum + (parseInt(r['남합계']) || 0), 0);
+        const totalFemaleEmployees = filtered.reduce((sum, r) => sum + (parseInt(r['여합계']) || 0), 0);
+        const avgMaleSalary = filtered.length > 0 ? filtered.reduce((sum, r) => sum + (parseInt(r['남_1인평균급여액']) || 0), 0) / filtered.length : 0;
+        const avgFemaleSalary = filtered.length > 0 ? filtered.reduce((sum, r) => sum + (parseInt(r['여_1인평균급여액']) || 0), 0) / filtered.length : 0;
+        const kosdaqCount = filtered.filter(r => r['시장구분'] === 'Q').length;
+        const kospiCount = filtered.filter(r => r['시장구분'] === 'I').length;
 
+        // 중앙값 계산
+        const maleSalaries = filtered.map(r => parseInt(r['남_1인평균급여액']) || 0).sort((a, b) => a - b);
+        const femaleSalaries = filtered.map(r => parseInt(r['여_1인평균급여액']) || 0).sort((a, b) => a - b);
         const calcMedian = (arr) => {
             if (arr.length === 0) return 0;
-            const sorted = arr.map(r => r.salary).sort((a, b) => a - b);
-            const mid = Math.floor(sorted.length / 2);
-            return sorted.length % 2 !== 0 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+            const mid = Math.floor(arr.length / 2);
+            return arr.length % 2 !== 0 ? arr[mid] : Math.round((arr[mid - 1] + arr[mid]) / 2);
         };
 
-        stats.medianMaleSalary = calcMedian(maleSalaries);
-        stats.medianFemaleSalary = calcMedian(femaleSalaries);
-
-        db.close();
-        res.json({ success: true, data: stats });
+        res.json({
+            success: true,
+            data: {
+                totalCompanies,
+                totalEmployees,
+                totalMaleEmployees,
+                totalFemaleEmployees,
+                avgMaleSalary: Math.round(avgMaleSalary),
+                avgFemaleSalary: Math.round(avgFemaleSalary),
+                kosdaqCount,
+                kospiCount,
+                medianMaleSalary: calcMedian(maleSalaries),
+                medianFemaleSalary: calcMedian(femaleSalaries)
+            }
+        });
     } catch (error) {
-        db.close();
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
 router.get('/stats/by-market', (req, res) => {
-    const db = getDb();
     try {
-        const rows = db.prepare(`
-            SELECT
-                시장구분,
-                COUNT(*) as companyCount,
-                SUM(남합계 + 여합계) as totalEmployees,
-                AVG(CAST(남_1인평균급여액 AS INTEGER)) as avgMaleSalary,
-                AVG(CAST(여_1인평균급여액 AS INTEGER)) as avgFemaleSalary
-            FROM stocksum
-            WHERE ${DATA_FILTER_CONDITIONS}
-            GROUP BY 시장구분
-        `).all();
+        const db = getData();
+        const filtered = db.filter(DATA_FILTER);
 
-        db.close();
-        res.json({ success: true, data: rows });
+        const byMarket = {};
+        filtered.forEach(r => {
+            const market = r['시장구분'];
+            if (!byMarket[market]) {
+                byMarket[market] = { companyCount: 0, totalEmployees: 0, salaries: [] };
+            }
+            byMarket[market].companyCount++;
+            byMarket[market].totalEmployees += (parseInt(r['남합계']) || 0) + (parseInt(r['여합계']) || 0);
+            byMarket[market].salaries.push(parseInt(r['남_1인평균급여액']) || 0, parseInt(r['여_1인평균급여액']) || 0);
+        });
+
+        const result = Object.entries(byMarket).map(([시장구분, data]) => ({
+            시장구분,
+            companyCount: data.companyCount,
+            totalEmployees: data.totalEmployees,
+            avgMaleSalary: Math.round(data.salaries.filter((_, i) => i % 2 === 0).reduce((a, b) => a + b, 0) / data.companyCount),
+            avgFemaleSalary: Math.round(data.salaries.filter((_, i) => i % 2 === 1).reduce((a, b) => a + b, 0) / data.companyCount)
+        }));
+
+        res.json({ success: true, data: result });
     } catch (error) {
-        db.close();
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
 router.get('/stats/salary-distribution', (req, res) => {
-    const db = getDb();
     try {
-        const maleSalary = db.prepare(`
-            SELECT CAST("남_1인평균급여액" AS INTEGER) as salary FROM stocksum
-            WHERE ${DATA_FILTER_CONDITIONS}
-            ORDER BY salary
-        `).all();
-
-        const femaleSalary = db.prepare(`
-            SELECT CAST("여_1인평균급여액" AS INTEGER) as salary FROM stocksum
-            WHERE ${DATA_FILTER_CONDITIONS}
-            ORDER BY salary
-        `).all();
+        const db = getData();
+        const filtered = db.filter(DATA_FILTER);
 
         const calcStats = (arr) => {
             if (arr.length === 0) return { min: 0, max: 0, median: 0, avg: 0 };
-            const salaries = arr.map(r => r.salary);
-            const sorted = [...salaries].sort((a, b) => a - b);
-            const min = sorted[0];
-            const max = sorted[sorted.length - 1];
-            const median = sorted.length % 2 === 0
-                ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
-                : sorted[Math.floor(sorted.length / 2)];
-            const avg = salaries.reduce((a, b) => a + b, 0) / salaries.length;
-            return { min, max, median, avg: Math.round(avg) };
+            const sorted = [...arr].sort((a, b) => a - b);
+            return {
+                min: sorted[0],
+                max: sorted[sorted.length - 1],
+                median: sorted.length % 2 === 0 ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2 : sorted[Math.floor(sorted.length / 2)],
+                avg: Math.round(arr.reduce((a, b) => a + b, 0) / arr.length)
+            };
         };
 
-        const result = {
-            male: calcStats(maleSalary),
-            female: calcStats(femaleSalary)
-        };
+        const maleSalaries = filtered.map(r => parseInt(r['남_1인평균급여액']) || 0);
+        const femaleSalaries = filtered.map(r => parseInt(r['여_1인평균급여액']) || 0);
 
-        db.close();
-        res.json({ success: true, data: result });
+        res.json({ success: true, data: { male: calcStats(maleSalaries), female: calcStats(femaleSalaries) } });
     } catch (error) {
-        db.close();
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
 router.get('/stats/market-comparison', (req, res) => {
-    const db = getDb();
     try {
-        const rows = db.prepare(`
-            SELECT
-                시장구분,
-                COUNT(*) as companyCount,
-                SUM(남합계 + 여합계) as totalEmployees,
-                SUM(CAST(남연간급여총액 AS INTEGER) + CAST(여연간급여총액 AS INTEGER)) as totalSalary,
-                AVG(CAST(남_1인평균급여액 AS INTEGER)) as avgMaleSalary,
-                AVG(CAST(여_1인평균급여액 AS INTEGER)) as avgFemaleSalary
-            FROM stocksum
-            WHERE ${DATA_FILTER_CONDITIONS}
-            GROUP BY 시장구분
-        `).all();
+        const db = getData();
+        const filtered = db.filter(DATA_FILTER);
+
+        const byMarket = {};
+        filtered.forEach(r => {
+            const market = r['시장구분'];
+            if (!byMarket[market]) {
+                byMarket[market] = { companyCount: 0, totalEmployees: 0, maleSalaries: [], femaleSalaries: [] };
+            }
+            byMarket[market].companyCount++;
+            byMarket[market].totalEmployees += (parseInt(r['남합계']) || 0) + (parseInt(r['여합계']) || 0);
+            byMarket[market].maleSalaries.push(parseInt(r['남_1인평균급여액']) || 0);
+            byMarket[market].femaleSalaries.push(parseInt(r['여_1인평균급여액']) || 0);
+        });
 
         const result = {};
-        rows.forEach(r => {
-            result[r.시장구분] = {
-                companyCount: r.companyCount,
-                totalEmployees: r.totalEmployees,
-                avgSalary: Math.round((r.avgMaleSalary + r.avgFemaleSalary) / 2),
-                avgMaleSalary: Math.round(r.avgMaleSalary),
-                avgFemaleSalary: Math.round(r.avgFemaleSalary)
+        Object.entries(byMarket).forEach(([key, data]) => {
+            result[key] = {
+                companyCount: data.companyCount,
+                totalEmployees: data.totalEmployees,
+                avgSalary: Math.round([...data.maleSalaries, ...data.femaleSalaries].reduce((a, b) => a + b, 0) / data.companyCount / 2),
+                avgMaleSalary: Math.round(data.maleSalaries.reduce((a, b) => a + b, 0) / data.maleSalaries.length),
+                avgFemaleSalary: Math.round(data.femaleSalaries.reduce((a, b) => a + b, 0) / data.femaleSalaries.length)
             };
         });
 
-        db.close();
         res.json({ success: true, data: result });
     } catch (error) {
-        db.close();
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
 router.get('/search/suggestions', (req, res) => {
-    const db = getDb();
     try {
+        const db = getData();
         const keyword = req.query.keyword || '';
-        const rows = db.prepare(`
-            SELECT DISTINCT 회사명 FROM stocksum 
-            WHERE 회사명 LIKE ? 
-            LIMIT 10
-        `).all(`%${keyword}%`);
-
-        db.close();
-        res.json({ success: true, data: rows.map(r => r.회사명) });
+        const suggestions = [...new Set(db.filter(r => r['회사명'].includes(keyword)).map(r => r['회사명']))].slice(0, 10);
+        res.json({ success: true, data: suggestions });
     } catch (error) {
-        db.close();
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
 router.get('/stats/gender-top10', (req, res) => {
-    const db = getDb();
     try {
-        const topMale = db.prepare(`
-            SELECT
-                회사명,
-                종목코드,
-                시장구분,
-                남합계,
-                여합계,
-                (CAST(남합계 AS REAL) / (CAST(남합계 AS REAL) + CAST(여합계 AS REAL))) * 100 as maleRatio
-            FROM stocksum
-            WHERE ${DATA_FILTER_CONDITIONS}
-            ORDER BY maleRatio DESC
-            LIMIT 10
-        `).all();
+        const db = getData();
+        const filtered = db.filter(DATA_FILTER);
 
-        const topFemale = db.prepare(`
-            SELECT
-                회사명,
-                종목코드,
-                시장구분,
-                남합계,
-                여합계,
-                (CAST(여합계 AS REAL) / (CAST(남합계 AS REAL) + CAST(여합계 AS REAL))) * 100 as femaleRatio
-            FROM stocksum
-            WHERE ${DATA_FILTER_CONDITIONS}
-            ORDER BY femaleRatio DESC
-            LIMIT 10
-        `).all();
+        const withRatio = filtered.map(r => ({
+            ...r,
+            maleRatio: (parseInt(r['남합계']) || 0) / ((parseInt(r['남합계']) || 0) + (parseInt(r['여합계']) || 0)) * 100,
+            femaleRatio: (parseInt(r['여합계']) || 0) / ((parseInt(r['남합계']) || 0) + (parseInt(r['여합계']) || 0)) * 100
+        }));
 
-        const avgStats = db.prepare(`
-            SELECT
-                AVG(CAST(남합계 AS REAL) / (CAST(남합계 AS REAL) + CAST(여합계 AS REAL)) * 100) as avgMaleRatio,
-                AVG(CAST(여합계 AS REAL) / (CAST(남합계 AS REAL) + CAST(여합계 AS REAL)) * 100) as avgFemaleRatio,
-                COUNT(*) as totalCount
-            FROM stocksum
-            WHERE ${DATA_FILTER_CONDITIONS}
-        `).get();
+        const topMale = [...withRatio].sort((a, b) => b.maleRatio - a.maleRatio).slice(0, 10);
+        const topFemale = [...withRatio].sort((a, b) => b.femaleRatio - a.femaleRatio).slice(0, 10);
 
-        db.close();
-        res.json({ success: true, data: { topMale, topFemale, avgMaleRatio: avgStats.avgMaleRatio, avgFemaleRatio: avgStats.avgFemaleRatio, totalCount: avgStats.totalCount } });
+        const avgMaleRatio = filtered.length > 0 ? filtered.reduce((sum, r) => sum + (parseInt(r['남합계']) || 0), 0) / filtered.reduce((sum, r) => sum + (parseInt(r['남합계']) || 0) + (parseInt(r['여합계']) || 0), 0) * 100 : 0;
+        const avgFemaleRatio = 100 - avgMaleRatio;
+
+        res.json({
+            success: true,
+            data: {
+                topMale: topMale.map(r => ({ 회사명: r['회사명'], 종목코드: r['종목코드'], 시장구분: r['시장구분'], 남합계: r['남합계'], 여합계: r['여합계'], maleRatio: r.maleRatio })),
+                topFemale: topFemale.map(r => ({ 회사명: r['회사명'], 종목코드: r['종목코드'], 시장구분: r['시장구분'], 남합계: r['남합계'], 여합계: r['여합계'], femaleRatio: r.femaleRatio })),
+                avgMaleRatio,
+                avgFemaleRatio,
+                totalCount: filtered.length
+            }
+        });
     } catch (error) {
-        db.close();
         res.status(500).json({ success: false, message: error.message });
     }
 });
